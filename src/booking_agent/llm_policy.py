@@ -111,6 +111,16 @@ def explicit_times(text):
 async def receive_with_llm(engine, incoming):
     try:
         result = await engine.provider.decide(engine.state.request, engine.state.messages)
+    except httpx.HTTPStatusError as error:
+        try:
+            schema_failure = error.response.json().get('error', {}).get('code') == 'json_validate_failed'
+        except (ValueError, AttributeError):
+            schema_failure = False
+        engine.store.log('provider_error', '', f'HTTP {error.response.status_code}',
+                         'json_validate_failed' if schema_failure else 'Остановить диалог без внешней отправки')
+        if schema_failure:
+            return engine._escalate('Groq дважды не сформировал ответ по JSON-схеме. Ничего не отправлено; диалог остановлен для проверки.')
+        return engine._escalate('Groq вернул ошибку API. Ничего не отправлено; проверьте доступ и квоту.')
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, RuntimeError):
         return engine._escalate('Groq недоступен, исчерпан лимит или ответ не прошёл проверку. Диалог приостановлен без отправки; проверьте журнал перед продолжением.')
     engine.store.log('decision', '', result['reason'], result['action'])

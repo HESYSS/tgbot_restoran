@@ -86,9 +86,22 @@ For ask_client/declined/unavailable use null fact fields. reason briefly explain
                            'required': list(fields), 'additionalProperties': False}}},
         }
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post('https://api.groq.com/openai/v1/chat/completions',
-                headers={'Authorization': f'Bearer {key}'}, json=payload)
-            response.raise_for_status()
+            for attempt in range(2):
+                response = await client.post('https://api.groq.com/openai/v1/chat/completions',
+                    headers={'Authorization': f'Bearer {key}'}, json=payload)
+                schema_failure = False
+                if response.status_code == 400:
+                    try:
+                        schema_failure = response.json().get('error', {}).get('code') == 'json_validate_failed'
+                    except (ValueError, AttributeError):
+                        pass
+                if schema_failure and attempt == 0:
+                    # Retry generation only, never a Telegram send. Keep strict schema;
+                    # do not trust or reuse the server's failed_generation content.
+                    payload = dict(payload, temperature=0)
+                    continue
+                response.raise_for_status()
+                break
         choice = response.json()['choices'][0]
         if choice.get('finish_reason') != 'stop':
             raise ValueError('Incomplete model response')
@@ -98,6 +111,11 @@ For ask_client/declined/unavailable use null fact fields. reason briefly explain
         if decision['action'] not in {'reply', 'ask_client', 'ask_manager', 'confirm', 'declined', 'offer_time', 'unavailable'} or not all(
                 isinstance(decision[k], str) and len(decision[k]) <= 3000 for k in ('message', 'reason')):
             raise ValueError('Invalid model fields')
+        if (not all(decision[k] is None or isinstance(decision[k], str) for k in ('restaurant', 'date', 'time', 'client_question'))
+                or (decision['guests'] is not None and type(decision['guests']) is not int)
+                or not isinstance(decision['offered_times'], list)
+                or not all(isinstance(value, str) for value in decision['offered_times'])):
+            raise ValueError('Invalid model fact fields')
         return decision
 
     async def draft_reply(self, request, history, incoming) -> str:
