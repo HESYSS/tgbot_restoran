@@ -30,6 +30,7 @@ class LiveDialogue:
             booking_date=form['booking_date'], booking_time=form['booking_time'],
             party_size=form['party_size'], booking_name=form['booking_name'],
             earliest=form['earliest'], latest=form['latest'],
+            ask_before_alternative=form.get('ask_before_alternative', False),
         )
         self.engine = BookingEngine(ConversationState(request), provider, self.store)
         self.lock = asyncio.Lock()
@@ -155,7 +156,8 @@ class LiveDialogue:
                 elif self.engine.state.pending_question:
                     self.checkpoint('waiting_client')
                     await self.tell('❓ ' + (self.engine.state.escalation_reason or incoming)[:2500]
-                                    + '\nНажмите «✍️ Ответить менеджеру». Ответ будет передан без изменений.')
+                                    + ('\nНажмите «✍️ Ответить менеджеру» и выберите время или откажитесь.' if self.engine.state.pending_time_offer
+                                       else '\nНажмите «✍️ Ответить менеджеру». Ответ будет передан без изменений.'))
                 if self.engine.state.status in TERMINAL:
                     status = self.engine.state.status
                     self.stop('finished')
@@ -176,6 +178,12 @@ class LiveDialogue:
             reply = self.engine.answer_pending_question(text)
             await self.send(reply)
             await self.tell('✅ Ваш ответ отправлен собеседнику.')
+            if self.engine.state.status in TERMINAL:
+                self.stop('finished')
+                await self.tell('Диалог завершён по вашему решению.')
+            elif self.engine.state.pending_question:
+                self.checkpoint('waiting_client')
+                await self.tell('❓ ' + self.engine.state.escalation_reason + '\nНажмите «✍️ Ответить менеджеру».')
             return reply
 
     @classmethod

@@ -14,6 +14,7 @@ class LocalDialogue:
             restaurant_name='Unknown restaurant', booking_date=form['booking_date'],
             booking_time=form['booking_time'], booking_name=form['booking_name'],
             party_size=form['party_size'], earliest=form['earliest'], latest=form['latest'],
+            ask_before_alternative=form.get('ask_before_alternative', False),
         )
         self.engine = BookingEngine(ConversationState(request, status=Status.AWAITING_REPLY),
                                     provider or RuleBasedProvider(), StateStore(directory/'state.json', directory/'decisions.jsonl'))
@@ -43,4 +44,6 @@ class LocalDialogue:
     def answer(self, text):
         reply = self.engine.answer_pending_question(text)
         self.engine.store.delivery(self.engine.store.last_outgoing_id, 'simulated')
+        if self.engine.state.status in {Status.CONFIRMED, Status.CANCELLED, Status.ESCALATED}:
+            self.stopped = True
         return reply

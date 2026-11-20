@@ -6,6 +6,7 @@ EXACT = "🎯 Ровно в это время"
 FLEX = "↔️ Можно раньше или позже"
 BEFORE = "⏰ Не позже"
 RANGE = "🕒 Указать диапазон"
+ASK = "🙋 Если время занято — спросить меня"
 CONFIRM = "🧪 Проверить диалог локально"
 LIVE_CONFIRM = "✍️ Написать текстом"
 VOICE_CONFIRM = "🎙 Отправить голосовое"
@@ -50,8 +51,11 @@ def advance(form: dict, value: str, today: date) -> None:
         form.update(booking_time=format_clock(clock(value)), step="flexibility")
     elif step == "flexibility":
         minutes = clock(form["booking_time"])
+        form['ask_before_alternative'] = value == ASK
         if value == EXACT:
             form.update(earliest=form["booking_time"], latest=form["booking_time"], step="restaurant")
+        elif value == ASK:
+            form.update(earliest=form['booking_time'], latest=form['booking_time'], step='restaurant')
         elif value == FLEX:
             form["step"] = "tolerance"
         elif value == BEFORE:
@@ -96,7 +100,7 @@ def prompt(form: dict) -> tuple[str, list[str]]:
         "guests": ("2/7 · Сколько гостей?\nВведите целое число от 1 до 30, например 2.", []),
         "date": ("3/7 · На какую дату?\nДля другой даты: ГГГГ-ММ-ДД.", ["Сегодня", "Завтра"]),
         "time": ("4/7 · Во сколько вам удобнее?\nВведите одно время, например 17:00. На следующем шаге можно задать гибкость. Всё время — по Лондону.", []),
-        "flexibility": (f"Желаемое время: {form.get('booking_time', '')}.\nЕсли оно занято, какие варианты вам подойдут?", [EXACT, FLEX, BEFORE, RANGE]),
+        "flexibility": (f"Желаемое время: {form.get('booking_time', '')}.\nЕсли оно занято, какие варианты вам подойдут?", [EXACT, FLEX, ASK, BEFORE, RANGE]),
         "tolerance": ("На сколько минут можно раньше или позже?\nВведите число минут, например 30. Для 17:00 это будет 16:30–17:30.", []),
         "earliest": ("С какого времени вам удобно?\nВведите ЧЧ:ММ. Агент не согласится на более раннее время.", []),
         "range": ("Введите два времени в пределах выбранной даты.\nНапример: 16:00-22:59 или от 16:00 до 22:59.\nЖелаемое время должно попадать в этот диапазон.", []),
@@ -108,7 +112,9 @@ def prompt(form: dict) -> tuple[str, list[str]]:
     venue = form['restaurant_name'] if form['restaurant_name'] != 'Unknown restaurant' else 'уточним у менеджера'
     return (f"7/7 · Проверьте заявку\n\nНа имя: {form['booking_name']}\nГостей: {form['party_size']}\n"
             f"Дата: {form['booking_date']}\nГород: Лондон\nЖелаемое время: {form['booking_time']}\n"
-            f"Допустимо: {form['earliest']}–{form['latest']} (Лондон)\nРесторан: {venue}\n"
+            f"Допустимо: {form['earliest']}–{form['latest']} (Лондон)\n"
+            + ('Если время занято: спросить меня перед согласованием альтернатив.\n' if form.get('ask_before_alternative') else '')
+            + f"Ресторан: {venue}\n"
             f"Адресат: {form['manager']}\nОтправитель: {'ваш аккаунт' if form['sender_mode'] == 'personal' else 'представитель сервиса'}\n\n"
             "Как отправить заявку? Выбранный формат применяется к первому сообщению и дальнейшим ответам агента. "
             "Нажатие отправит имя и детали указанному выше адресату. При сбое озвучивания ответ уйдёт текстом. "

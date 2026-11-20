@@ -34,6 +34,8 @@ class BookingEngine:
             self.store.log("incoming", incoming, "Reply received after a terminal state", "Ignored; no further messages sent")
             return None
         self.state.messages.append({"role": "manager", "content": incoming})
+        # A new manager message invalidates approval of an older offer.
+        self.state.pending_time_offer = None
         self.state.pending_reply_prefix = None
         self.store.log("incoming", incoming, "Manager reply received", "Classifying reply safely")
         from .restaurant import introduced_name
@@ -120,6 +122,33 @@ class BookingEngine:
         answer = client_answer.strip()
         if not answer or len(answer) > 2000:
             raise ValueError("Answer must contain 1 to 2000 characters")
+        if self.state.pending_time_offer:
+            from .llm_policy import finish_declined
+            from .display import human_time, human_date, guests
+            offer = self.state.pending_time_offer
+            declined = answer.casefold().strip(' .!') in {'нет', 'ні', 'no', 'отказ', 'не подходит', 'не підходить'}
+            selected = answer if answer in offer['times'] else None
+            if not declined and selected is None:
+                raise ValueError('Выберите одно предложенное время: ' + ', '.join(offer['times']) + '. Например, 17:30. Для отказа напишите «Нет».')
+            self.store.log('client_input', answer, 'Клиент ответил на предложение другого времени',
+                           'Отказаться' if declined else 'Разрешить только явно выбранное клиентом время')
+            self.state.messages.append({'role': 'client', 'content': answer})
+            self.state.pending_time_offer = None
+            self.state.pending_question = None
+            self.state.pending_confirmation = None
+            self.state.pending_reply_prefix = None
+            self.state.escalation_reason = None
+            if declined:
+                return finish_declined(self, 'Client declined alternative times',
+                    'Thank you for the offer, but those times would not work for us. Have a lovely evening.')
+            r = self.state.request
+            r.booking_time = r.earliest = r.latest = selected
+            reply = self._reply(f'{human_time(selected).capitalize()} would be lovely, thank you. '
+                f'Could you please confirm the booking for {guests(r.party_size)} on {human_date(r.booking_date)}?',
+                'Клиент явно согласовал новое время; запросить подтверждение ресторана.')
+            if re.search(r'\b(?:contact number|phone number|telephone number)\b', offer['incoming'], re.I):
+                self._ask_client(offer['incoming'], 'Какой контактный номер можно передать ресторану?')
+            return reply
         self.store.log("client_input", answer, "Client supplied an answer to the pending question", "Use supplied text without inventing details")
         self.state.messages.append({'role': 'client', 'content': answer})
         prefix = self.state.pending_reply_prefix

@@ -24,6 +24,7 @@ class BookingRequest:
     booking_name: str = ""
     earliest: str | None = None
     latest: str | None = None
+    ask_before_alternative: bool = False
 
     @classmethod
     def for_today(cls, restaurant_name: str, london_today: date) -> "BookingRequest":
@@ -40,6 +41,7 @@ class ConversationState:
     pending_question: str | None = None
     pending_confirmation: dict | None = None
     pending_reply_prefix: str | None = None
+    pending_time_offer: dict | None = None
 
     def to_dict(self) -> dict:
         result = asdict(self)
@@ -56,4 +58,5 @@ class ConversationState:
             pending_question=value.get("pending_question"),
             pending_confirmation=value.get("pending_confirmation"),
             pending_reply_prefix=value.get("pending_reply_prefix"),
+            pending_time_offer=value.get("pending_time_offer"),
         )

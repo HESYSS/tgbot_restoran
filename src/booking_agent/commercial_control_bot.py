@@ -368,8 +368,12 @@ class CommercialControlPanel:
                         if isinstance(dialogue, LiveDialogue):
                             self.registry.wait_for_answer(chat_id, dialogue.last_incoming_id)
                         extra = (' Вместе с вашим текстом агент сообщит выбранное время.' if dialogue.engine.state.pending_reply_prefix else '')
-                        await message.answer((f'Введите ответ по-английски. Ваш текст будет передан {dialogue.target_handle} без перевода.{extra} Для отмены нажмите «↩️ Отмена».' if isinstance(dialogue, LiveDialogue) else 'Введите ответ по-английски для локального теста.'),
-                            reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=CANCEL_DISCONNECT)], [KeyboardButton(text=STOP_DIALOGUE)]], resize_keyboard=True))
+                        offer = dialogue.engine.state.pending_time_offer
+                        prompt = ('Выберите предложенное время (Лондон) или «Нет». Агент сообщит ваше решение ресторану по-английски.' if offer else
+                            (f'Введите ответ по-английски. Ваш текст будет передан {dialogue.target_handle} без перевода.{extra} Для отмены нажмите «↩️ Отмена».' if isinstance(dialogue, LiveDialogue) else 'Введите ответ по-английски для локального теста.'))
+                        choices = ([[KeyboardButton(text=time) for time in offer['times']], [KeyboardButton(text='Нет')]] if offer else [])
+                        await message.answer(prompt,
+                            reply_markup=ReplyKeyboardMarkup(keyboard=choices + [[KeyboardButton(text=CANCEL_DISCONNECT)], [KeyboardButton(text=STOP_DIALOGUE)]], resize_keyboard=True))
                     else:
                         await message.answer('Сейчас нет вопроса, ожидающего вашего ответа.')
                     return
@@ -410,7 +414,7 @@ class CommercialControlPanel:
                     self.answering_manager.discard(chat_id)
                     if route:
                         self.registry.wait_for_answer(chat_id, None)
-                    await message.answer(('💬 Ответ отправлен:\n' if isinstance(dialogue, LiveDialogue) else '💬 Подготовленный ответ:\n') + reply, reply_markup=dialogue_menu(isinstance(dialogue, LiveDialogue)))
+                    await message.answer(('💬 Ответ отправлен:\n' if isinstance(dialogue, LiveDialogue) else '💬 Подготовленный ответ:\n') + reply, reply_markup=menu() if dialogue.stopped else dialogue_menu(isinstance(dialogue, LiveDialogue)))
                     return
                 await message.answer('Используйте кнопки управления диалогом.', reply_markup=dialogue_menu(isinstance(dialogue, LiveDialogue)))
                 return

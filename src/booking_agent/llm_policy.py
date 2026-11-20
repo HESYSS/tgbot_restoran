@@ -36,6 +36,12 @@ def accept_offer(engine, incoming, result, offered_times=None):
         return finish_declined(engine, 'Alternative date or party size does not match request',
             'Thank you, but that would not work for our booking. Have a lovely evening.')
     if not allowed:
+        if r.ask_before_alternative:
+            engine.state.pending_time_offer = dict(times=sorted(offered_times), incoming=incoming)
+            engine.state.pending_reply_prefix = None
+            engine.state.pending_confirmation = None
+            return engine._ask_client(incoming, f'На {r.booking_time} мест нет. Предлагают ' + ', '.join(sorted(offered_times))
+                + ' (Лондон). Какое время вам подходит? Введите один из вариантов в формате ЧЧ:ММ или «Нет», чтобы отказаться. До вашего решения ничего не согласую.')
         return finish_declined(engine, 'Alternative outside client-approved time window',
             'Thank you for the offer, but that time would not work for us. Have a lovely evening.')
     def minutes(time):
